@@ -14,8 +14,8 @@ three command line tools.
 |---|---|
 | Package | `libzip 1.11.4` |
 | Published at | https://anaconda.org/gasterlab/libzip |
-| Built and tested on | `linux-64` (see [Verified build](#verified-build)) |
-| Recipe also covers | `win-64`, `osx-64`, `osx-arm64` |
+| Built and tested on | `linux-64` and `win-64` (see [Verified build](#verified-build)) |
+| Recipe also covers | `osx-64`, `osx-arm64` — selectors are in place, but untested |
 | Source | https://github.com/nih-at/libzip/releases/tag/v1.11.4 |
 
 ```bash
@@ -120,8 +120,18 @@ until that migration lands upstream.
 
 ## Verified build
 
-Built on Arch Linux (glibc 2.42, kernel 7.1.9) with conda-build 26.7.1 against
-conda-forge, targeting the glibc 2.17 sysroot:
+Both published builds pass the full `conda build` run, test section included:
+
+```
+libzip-1.11.4-hffcc938_0.conda   linux-64   119 KiB
+libzip-1.11.4-hb54a563_0.conda   win-64     110 KiB
+```
+
+The win-64 build comes from the CI job on `windows-latest`, which is what
+exercises `bld.bat` and the MSVC toolchain.
+
+The linux-64 build below was made on Arch Linux (glibc 2.42, kernel 7.1.9) with
+conda-build 26.7.1 against conda-forge, targeting the glibc 2.17 sysroot:
 
 ```
 libzip-1.11.4-hffcc938_0.conda   (linux-64, 119 KiB)
