@@ -1,0 +1,98 @@
+{% set name = "libzip" %}
+{% set version = "1.11.4" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/nih-at/{{ name }}/releases/download/v{{ version }}/{{ name }}-{{ version }}.tar.xz
+  sha256: 8a247f57d1e3e6f6d11413b12a6f28a9d388de110adc0ec608d893180ed7097b
+
+build:
+  number: 0
+  # libzip installs as libzip.so.5 / libzip.5.dylib / zip.dll.  Upstream keeps
+  # the ABI stable inside a minor series and bumps the soversion when it does
+  # not, so pinning to x.x is what downstream consumers need.
+  run_exports:
+    - {{ pin_subpackage('libzip', max_pin='x.x') }}
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ stdlib('c') }}
+    - cmake >=3.20
+    - ninja
+    - pkg-config
+  host:
+    # zlib is mandatory; the rest enable the optional compression methods and
+    # the AES encryption support that build.sh explicitly turns on.
+    - zlib
+    - bzip2
+    # conda-forge splits xz: the runtime is `liblzma`, the headers and the
+    # linker symlink live in `liblzma-devel`.  Depending on `liblzma` alone
+    # makes CMake's find_package(LibLZMA) fail and silently drops XZ support.
+    - liblzma-devel
+    - zstd
+    - openssl
+  # No explicit `run:` section: every host dependency above ships a
+  # run_exports, so conda-build pins the correct runtime libraries itself.
+
+test:
+  requires:
+    # The test compiles a small consumer program, which is the only way to
+    # prove that the headers, the shared library and the CMake/pkg-config
+    # metadata are all installed consistently.
+    - {{ compiler('c') }}
+    - {{ stdlib('c') }}
+    # Pinned deliberately: left unbounded, the solver is free to satisfy the
+    # test environment with a decade-old cmake that has neither `-S`/`-B`
+    # (3.13) nor `ctest --test-dir` (3.20), and the test fails for a reason
+    # that has nothing to do with the package.
+    - cmake >=3.20
+    - ninja
+    - pkg-config
+  files:
+    - test_libzip.c
+    - CMakeLists.txt
+  commands:
+    # The command line tools the package ships.
+    - zipcmp -V
+    - zipmerge -V
+    - ziptool -h
+
+    # pkg-config metadata must resolve inside the test environment, not point
+    # back at conda-build's throwaway build prefix.
+    - pkg-config --modversion libzip
+
+    # Build test_libzip.c against the installed package through the exported
+    # CMake targets -- that is how downstream recipes consume libzip, and it
+    # is the part of the packaging most likely to be subtly wrong.  The test
+    # binary then asserts at runtime that bzip2, XZ, Zstandard and OpenSSL
+    # really made it into the library.
+    - cmake -G Ninja -S . -B build-test -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX"           # [unix]
+    - cmake -G Ninja -S . -B build-test -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%LIBRARY_PREFIX%"  # [win]
+    - cmake --build build-test
+    - ctest --test-dir build-test --output-on-failure
+
+about:
+  home: https://libzip.org/
+  license: BSD-3-Clause
+  license_family: BSD
+  license_file: LICENSE
+  summary: A C library for reading, creating, and modifying zip archives
+  description: |
+    libzip is a C library for reading, creating, and modifying zip archives.
+    Files can be added from data buffers, files, or compressed data copied
+    directly from other zip archives. Changes made without closing the archive
+    can be reverted.
+
+    This build enables the deflate (zlib), bzip2, XZ and Zstandard compression
+    methods as well as AES encryption via OpenSSL, and ships the zipcmp,
+    zipmerge and ziptool command line utilities.
+  doc_url: https://libzip.org/documentation/
+  dev_url: https://github.com/nih-at/libzip
+
+extra:
+  recipe-maintainers:
+    - windings-lab

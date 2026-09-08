@@ -1,0 +1,41 @@
+# Toolchain selection for this recipe.
+#
+# conda-build expands {{ compiler('c') }} to <c_compiler>_<target_platform> and
+# {{ stdlib('c') }} to <c_stdlib>_<target_platform>, so both keys have to be
+# defined somewhere.  Spelling them out here keeps `conda build .` working on a
+# bare Miniforge install, without depending on conda-forge's global pinnings.
+#
+# zlib, bzip2, xz and zstd are deliberately *not* pinned here: they all ship
+# run_exports, so conda-build derives the correct runtime bounds from whatever
+# was used at build time.  openssl is the exception, see below.
+
+c_compiler:
+  - gcc                         # [linux]
+  - clang                       # [osx]
+  - vs2022                      # [win]
+
+cxx_compiler:
+  - gxx                         # [linux]
+  - clangxx                     # [osx]
+  - vs2022                      # [win]
+
+# glibc 2.17 is the oldest ABI conda-forge targets on Linux; building against
+# that sysroot keeps the package usable on older distributions.
+c_stdlib:
+  - sysroot                     # [linux]
+  - macosx_deployment_target    # [osx]
+  - vs                          # [win]
+
+c_stdlib_version:
+  - 2.17                        # [linux]
+  - 10.13                       # [osx and x86_64]
+  - 11.0                        # [osx and arm64]
+
+# conda-forge already publishes openssl 4.0.1, but libcurl -- and with it
+# cmake, git and much of the rest of the toolchain -- is still linked against
+# openssl 3.  Building libzip against 4.x makes its run_exports pin
+# `openssl >=4.0.1,<5.0a0`, and the resulting package then cannot be installed
+# next to cmake at all: the test environment stops solving entirely.
+# Stay on the 3.x series until that migration lands.
+openssl:
+  - '3'

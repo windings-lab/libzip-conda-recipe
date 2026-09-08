@@ -1,0 +1,11 @@
+# conda-build output and scratch
+build_artifacts/
+conda-bld/
+*.conda
+*.tar.bz2
+
+# local build dirs created by the smoke test
+build/
+build-cmake/
+test_pkgconfig
+*.zip

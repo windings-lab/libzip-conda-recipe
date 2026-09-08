@@ -1,0 +1,83 @@
+name: conda-build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# The recipe is meant to be built the same way on both platforms the role
+# cares about, so CI builds it on Linux and Windows from the same sources.
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          channels: conda-forge
+          conda-remove-defaults: "true"
+
+      - name: Install conda-build
+        run: conda install -y -n base conda-build anaconda-client
+
+      - name: Build and test the package
+        run: |
+          conda build . \
+            -c conda-forge --override-channels \
+            --no-anaconda-upload \
+            --output-folder build_artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libzip-${{ matrix.os }}
+          path: build_artifacts/*/*.conda
+          if-no-files-found: error
+
+  # Publishing is a separate, tag-triggered job so that a green build never
+  # uploads anything by accident.  Set the ANACONDA_API_TOKEN secret to enable.
+  upload:
+    name: upload to anaconda.org
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: build_artifacts
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          channels: conda-forge
+          conda-remove-defaults: "true"
+
+      - name: Install anaconda-client
+        run: conda install -y -n base anaconda-client
+
+      - name: Upload
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+        run: |
+          if [ -z "${ANACONDA_API_TOKEN}" ]; then
+            echo "ANACONDA_API_TOKEN is not set; skipping upload" >&2
+            exit 1
+          fi
+          find build_artifacts -name '*.conda' -print -exec \
+            anaconda --token "${ANACONDA_API_TOKEN}" upload --no-progress {} +
