@@ -13,9 +13,14 @@ three command line tools.
 | | |
 |---|---|
 | Package | `libzip 1.11.4` |
+| Published at | https://anaconda.org/gasterlab/libzip |
 | Built and tested on | `linux-64` (see [Verified build](#verified-build)) |
 | Recipe also covers | `win-64`, `osx-64`, `osx-arm64` |
 | Source | https://github.com/nih-at/libzip/releases/tag/v1.11.4 |
+
+```bash
+conda install -c gasterlab libzip
+```
 
 ## Layout
 
@@ -50,6 +55,12 @@ Install the result and try it:
 conda create -n libzip-test -c local -c conda-forge libzip
 conda activate libzip-test
 ziptool -h
+```
+
+Or install the published build straight from anaconda.org:
+
+```bash
+conda create -n libzip-test -c gasterlab -c conda-forge libzip
 ```
 
 ## What the recipe does
