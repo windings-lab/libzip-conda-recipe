@@ -31,15 +31,20 @@ ziptool -h
 ```bash
 git clone https://github.com/windings-lab/libzip-conda-recipe.git
 cd libzip-conda-recipe
-./bootstrap.sh          # bootstrap.ps1 on Windows
+./bootstrap.sh
 ```
 
-The package lands in `build_artifacts/`.
+The package lands in `build_artifacts/`. On Windows, run it from Git Bash, which
+ships with Git for Windows.
 
 `bootstrap.sh` uses `conda` if it is already on `PATH`. Otherwise it fetches the
 `micromamba` static binary and builds a tool environment holding `conda`,
 `conda-build` and `anaconda-client` under `~/.conda-tools` — about 45 seconds,
 against two to three minutes for the full Miniforge installer.
+
+`CONDA_TOOLS_PREFIX` has to point outside the recipe directory: conda-build
+puts `conda-bld` under it, and the `test: files:` copy recurses if that lands
+inside the recipe. The script refuses such a prefix rather than failing later.
 
 With conda already set up, this is equivalent:
 
@@ -86,7 +91,7 @@ directory and `conda build .` works from a fresh clone.
 | `conda_build_config.yaml` | Toolchain selection and the OpenSSL pin |
 | `test_libzip.cpp` | Smoke test compiled and run against the installed package |
 | `CMakeLists.txt` | Consumer project for the smoke test — does **not** build libzip |
-| `bootstrap.sh` / `bootstrap.ps1` | One-command build, conda included |
+| `bootstrap.sh` | One-command build, conda included |
 | `bump.sh` | Points the recipe at a new upstream version |
 | `environment.yml` | Channel list and dependency for consumers |
 | `.github/workflows/conda-build.yml` | Builds on Linux and Windows; publishes from `main` |

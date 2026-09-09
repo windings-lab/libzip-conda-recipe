@@ -6,9 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  CONDA_TOOLS_PREFIX: ${{ github.workspace }}/.conda-tools
-
 jobs:
   build:
     name: build (${{ matrix.os }})
@@ -16,13 +13,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            script: ./bootstrap.sh
-            shell: bash
-          - os: windows-latest
-            script: ./bootstrap.ps1
-            shell: pwsh
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -30,13 +24,12 @@ jobs:
       # only the package cache is restored; the tool env is rebuilt from it
       - uses: actions/cache@v4
         with:
-          path: ${{ env.CONDA_TOOLS_PREFIX }}/pkgs
+          path: ~/.conda-tools/pkgs
           key: conda-pkgs-${{ matrix.os }}-${{ hashFiles('meta.yaml', 'conda_build_config.yaml') }}
           restore-keys: conda-pkgs-${{ matrix.os }}-
 
       - name: Build and test the package
-        shell: ${{ matrix.shell }}
-        run: ${{ matrix.script }}
+        run: ./bootstrap.sh
 
       - uses: actions/upload-artifact@v4
         with:

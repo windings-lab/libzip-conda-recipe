@@ -6,6 +6,7 @@ conda-bld/
 
 .idea/
 cmake-build-*/
+.conda-tools/
 
 # local build dirs created by the smoke test
 build/

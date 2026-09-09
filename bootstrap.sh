@@ -2,8 +2,18 @@
 # Builds the package. Bootstraps conda if needed; uploads if ANACONDA_API_TOKEN is set.
 set -euo pipefail
 
-readonly TOOLS="${CONDA_TOOLS_PREFIX:-${HOME}/.conda-tools}"
+tools_arg="${CONDA_TOOLS_PREFIX:-${HOME}/.conda-tools}"
+mkdir -p "${tools_arg}"
+readonly TOOLS="$(cd "${tools_arg}" && pwd)"
 readonly OUTPUT="build_artifacts"
+
+case "${TOOLS}/" in
+    "$(pwd)"/*)
+        echo "CONDA_TOOLS_PREFIX must be outside the recipe directory:" >&2
+        echo "conda-bld would land inside it and the test files would recurse" >&2
+        exit 1
+        ;;
+esac
 
 export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-${TOOLS}/pkgs}"
 
@@ -27,9 +37,10 @@ fi
 
 if ! command -v conda > /dev/null; then
     case "$(uname -s)" in
-        Linux) platform=linux ;;
-        Darwin) platform=osx ;;
-        *) echo "cannot bootstrap on $(uname -s); use bootstrap.ps1 on Windows" >&2; exit 1 ;;
+        Linux) platform=linux; member=bin/micromamba ;;
+        Darwin) platform=osx; member=bin/micromamba ;;
+        MINGW* | MSYS* | CYGWIN*) platform=win; member=Library/bin/micromamba.exe ;;
+        *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
     esac
     case "$(uname -m)" in
         x86_64) arch=64 ;;
@@ -38,11 +49,10 @@ if ! command -v conda > /dev/null; then
     esac
 
     echo "bootstrapping conda-build into ${TOOLS}"
-    mkdir -p "${TOOLS}"
     curl -fsSL "https://micro.mamba.pm/api/micromamba/${platform}-${arch}/latest" |
-        tar -xj -C "${TOOLS}" bin/micromamba
+        tar -xj -C "${TOOLS}" "${member}"
 
-    MAMBA_ROOT_PREFIX="${TOOLS}" "${TOOLS}/bin/micromamba" create -y \
+    MAMBA_ROOT_PREFIX="${TOOLS}" "${TOOLS}/${member}" create -y \
         -p "${TOOLS}/env" -c conda-forge --override-channels \
         conda conda-build anaconda-client
 
