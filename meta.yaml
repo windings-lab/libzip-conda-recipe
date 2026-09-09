@@ -11,7 +11,7 @@ source:
 
 build:
   number: 0
-  # matches the libzip.so.5 soname
+  # stricter than the libzip.so.5 soname, which upstream bumps on ABI breaks
   run_exports:
     - {{ pin_subpackage('libzip', max_pin='x.x') }}
 

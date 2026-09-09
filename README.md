@@ -37,10 +37,12 @@ cd libzip-conda-recipe
 The package lands in `build_artifacts/`. On Windows, run it from Git Bash, which
 ships with Git for Windows.
 
-`bootstrap.sh` uses `conda` if it is already on `PATH`. Otherwise it fetches the
-`micromamba` static binary and builds a tool environment holding `conda`,
-`conda-build` and `anaconda-client` under `~/.conda-tools` — about 45 seconds,
-against two to three minutes for the full Miniforge installer.
+`bootstrap.sh` reuses an existing conda only when its base environment already
+has `conda-build`, so it never installs into an installation it does not own.
+Otherwise it fetches the `micromamba` static binary and builds a tool
+environment holding `conda`, `conda-build` and `anaconda-client` under
+`~/.conda-tools` — about 45 seconds, against two to three minutes for the full
+Miniforge installer.
 
 `CONDA_TOOLS_PREFIX` has to point outside the recipe directory: conda-build
 puts `conda-bld` under it, and the `test: files:` copy recurses if that lands
@@ -132,7 +134,7 @@ cannot be passed rather than being rejected at runtime.
 
 ## Problems hit while writing this recipe
 
-Three issues came up that are worth recording, because none of them produces an
+Four issues came up that are worth recording, because none of them produces an
 obvious error message.
 
 **1. `liblzma` alone is not enough.** conda-forge splits the xz project into
@@ -160,6 +162,14 @@ reached for cmake 3.5 in the first place: it was the only cmake old enough to
 carry no libcurl dependency. `conda_build_config.yaml` pins `openssl: '3'`
 until that migration lands upstream.
 
+**4. A build directory inside the recipe directory recurses.** Pointing
+`CONDA_TOOLS_PREFIX` at a path inside the repository puts `conda-bld` there
+too. conda-build then copies the recipe into `info/test/`, the recipe now
+contains that `conda-bld`, and the copy walks into itself — the error is a
+`cp -a` failure with a path several thousand characters long, naming
+`info/test/` seventeen times over. `bootstrap.sh` now rejects such a prefix up
+front.
+
 ## Verified build
 
 Both platforms pass the full `conda build` run, test section included. The
@@ -169,7 +179,7 @@ Linux (glibc 2.42, kernel 7.1.9) with conda-build 26.7.1 against conda-forge,
 targeting the glibc 2.17 sysroot:
 
 ```
-libzip-1.11.4-hab58984_0.conda   (linux-64, 119 KiB)
+libzip-1.11.4-hab58984_0.conda   (linux-64, 125 KiB as published)
 
 depends:
   __glibc >=2.17,<3.0.a0     libgcc >=16

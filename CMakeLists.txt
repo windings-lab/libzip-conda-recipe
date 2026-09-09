@@ -4,7 +4,7 @@
 # config files that the package ships (lib/cmake/libzip/), which is how other
 # conda recipes consume libzip.  Driven by the test section of meta.yaml.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 project(libzip_conda_smoke_test CXX)
 

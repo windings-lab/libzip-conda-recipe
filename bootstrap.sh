@@ -4,7 +4,11 @@ set -euo pipefail
 
 tools_arg="${CONDA_TOOLS_PREFIX:-${HOME}/.conda-tools}"
 mkdir -p "${tools_arg}"
-readonly TOOLS="$(cd "${tools_arg}" && pwd)"
+TOOLS="$(cd "${tools_arg}" && pwd)"
+if command -v cygpath > /dev/null; then
+    TOOLS="$(cygpath -m "${TOOLS}")"
+fi
+readonly TOOLS
 readonly OUTPUT="build_artifacts"
 
 case "${TOOLS}/" in
@@ -65,6 +69,12 @@ if ! can_build; then
         conda conda-build anaconda-client
 
     add_conda_to_path "${TOOLS}/env"
+fi
+
+if [ -n "${ANACONDA_API_TOKEN:-}" ] &&
+    ! conda run -n base anaconda --help > /dev/null 2>&1; then
+    echo "ANACONDA_API_TOKEN is set but this conda has no anaconda-client" >&2
+    exit 1
 fi
 
 conda build . \
