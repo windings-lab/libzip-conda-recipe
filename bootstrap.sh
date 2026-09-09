@@ -5,27 +5,37 @@ set -euo pipefail
 readonly PREFIX="${MINIFORGE_PREFIX:-${HOME}/miniforge3}"
 readonly OUTPUT="build_artifacts"
 
+# $CONDA is set by setup-miniconda in CI, where conda is installed but not on PATH
 if ! command -v conda > /dev/null; then
-    if [ ! -d "${PREFIX}" ]; then
-        case "$(uname -s)" in
-            Linux) os=Linux ;;
-            Darwin) os=MacOSX ;;
-            *) echo "unsupported OS: $(uname -s); use bootstrap.ps1 on Windows" >&2; exit 1 ;;
-        esac
-        case "$(uname -m)" in
-            x86_64) arch=x86_64 ;;
-            aarch64 | arm64) arch=$([ "${os}" = Linux ] && echo aarch64 || echo arm64) ;;
-            *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
-        esac
+    for candidate in "${CONDA:-}" "${PREFIX}"; do
+        if [ -n "${candidate}" ] && [ -f "${candidate}/etc/profile.d/conda.sh" ]; then
+            # shellcheck disable=SC1091
+            . "${candidate}/etc/profile.d/conda.sh"
+            conda activate base
+            break
+        fi
+    done
+fi
 
-        installer="$(mktemp -t miniforge.XXXXXX.sh)"
-        trap 'rm -f "${installer}"' EXIT
+if ! command -v conda > /dev/null; then
+    case "$(uname -s)" in
+        Linux) os=Linux ;;
+        Darwin) os=MacOSX ;;
+        *) echo "cannot install conda on $(uname -s); use bootstrap.ps1 on Windows" >&2; exit 1 ;;
+    esac
+    case "$(uname -m)" in
+        x86_64) arch=x86_64 ;;
+        aarch64 | arm64) arch=$([ "${os}" = Linux ] && echo aarch64 || echo arm64) ;;
+        *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+    esac
 
-        echo "installing Miniforge into ${PREFIX}"
-        curl -fsSL -o "${installer}" \
-            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-${os}-${arch}.sh"
-        bash "${installer}" -b -p "${PREFIX}"
-    fi
+    installer="$(mktemp -t miniforge.XXXXXX.sh)"
+    trap 'rm -f "${installer}"' EXIT
+
+    echo "installing Miniforge into ${PREFIX}"
+    curl -fsSL -o "${installer}" \
+        "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-${os}-${arch}.sh"
+    bash "${installer}" -b -p "${PREFIX}"
 
     # shellcheck disable=SC1091
     . "${PREFIX}/etc/profile.d/conda.sh"
