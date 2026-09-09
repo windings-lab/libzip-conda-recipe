@@ -35,33 +35,40 @@ directory and `conda build .` works from a fresh clone.
 | `conda_build_config.yaml` | Toolchain selection and the OpenSSL pin |
 | `test_libzip.cpp` | Smoke test compiled and run against the installed package |
 | `CMakeLists.txt` | Consumer project for the smoke test — does **not** build libzip |
-| `.github/workflows/conda-build.yml` | Builds on Linux and Windows; uploads on tags |
+| `bootstrap.sh` / `bootstrap.ps1` | One-command build, including installing conda itself |
+| `.github/workflows/conda-build.yml` | Builds on Linux and Windows; publishes from `main` |
 
 ## Building
 
-```bash
-# Miniforge or any conda install with conda-build available
-conda install -n base conda-build anaconda-client
+From a machine with nothing installed:
 
+```bash
 git clone https://github.com/windings-lab/libzip-conda-recipe.git
 cd libzip-conda-recipe
-
-conda build . -c conda-forge --override-channels
+./bootstrap.sh          # bootstrap.ps1 on Windows
 ```
 
-Install the result and try it:
+The script installs Miniforge into `~/miniforge3` only if `conda` is missing,
+adds `conda-build` if it is not already there, and leaves the package in
+`build_artifacts/`. Set `MINIFORGE_PREFIX` to install conda somewhere else, and
+`ANACONDA_API_TOKEN` to publish the result as well. With conda already set up,
+plain `conda build . -c conda-forge --override-channels` does the same thing.
+
+CI runs the same `bootstrap.sh` on both platforms, so what runs there is what
+runs locally. `bootstrap.ps1` is the exception: CI reaches Windows through Git
+Bash with conda already installed, so the PowerShell path — specifically its
+Miniforge install — has not been exercised.
+
+Install the published build and try it:
 
 ```bash
-conda create -n libzip-test -c local -c conda-forge libzip
-conda activate libzip-test
+conda env create -f environment.yml
+conda activate libzip-demo
 ziptool -h
 ```
 
-Or install the published build straight from anaconda.org:
-
-```bash
-conda create -n libzip-test -c gasterlab -c conda-forge libzip
-```
+`environment.yml` carries the channel list, so no `-c` flag is needed. The
+equivalent one-liner is `conda install -c gasterlab libzip`.
 
 ## What the recipe does
 

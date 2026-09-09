@@ -5,9 +5,9 @@ conda-bld/
 *.tar.bz2
 
 .idea/
+cmake-build-*/
 
 # local build dirs created by the smoke test
 build/
-build-cmake/
-test_pkgconfig
+build-test/
 *.zip

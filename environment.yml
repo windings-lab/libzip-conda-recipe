@@ -1,0 +1,8 @@
+name: libzip-demo
+
+channels:
+  - gasterlab
+  - conda-forge
+
+dependencies:
+  - libzip
