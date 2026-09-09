@@ -5,9 +5,6 @@ set -euo pipefail
 tools_arg="${CONDA_TOOLS_PREFIX:-${HOME}/.conda-tools}"
 mkdir -p "${tools_arg}"
 TOOLS="$(cd "${tools_arg}" && pwd)"
-if command -v cygpath > /dev/null; then
-    TOOLS="$(cygpath -m "${TOOLS}")"
-fi
 readonly TOOLS
 readonly OUTPUT="build_artifacts"
 
