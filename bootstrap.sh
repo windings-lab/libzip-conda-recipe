@@ -17,6 +17,11 @@ esac
 
 export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-${TOOLS}/pkgs}"
 
+can_build() {
+    command -v conda > /dev/null &&
+        conda list -n base conda-build 2> /dev/null | grep -q '^conda-build '
+}
+
 add_conda_to_path() {
     for dir in "$1/bin" "$1/Scripts"; do
         if [ -x "${dir}/conda" ] || [ -x "${dir}/conda.exe" ]; then
@@ -27,15 +32,18 @@ add_conda_to_path() {
     return 1
 }
 
-if ! command -v conda > /dev/null; then
+if ! can_build; then
     for candidate in "${CONDA:-}" "${TOOLS}/env"; do
-        if [ -n "${candidate}" ] && add_conda_to_path "${candidate}"; then
+        [ -n "${candidate}" ] || continue
+        outer_path="${PATH}"
+        if add_conda_to_path "${candidate}" && can_build; then
             break
         fi
+        export PATH="${outer_path}"
     done
 fi
 
-if ! command -v conda > /dev/null; then
+if ! can_build; then
     case "$(uname -s)" in
         Linux) platform=linux; member=bin/micromamba ;;
         Darwin) platform=osx; member=bin/micromamba ;;
@@ -58,9 +66,6 @@ if ! command -v conda > /dev/null; then
 
     add_conda_to_path "${TOOLS}/env"
 fi
-
-conda list -n base conda-build | grep -q '^conda-build ' ||
-    conda install -y -n base -c conda-forge conda-build anaconda-client
 
 conda build . \
     -c conda-forge --override-channels \
