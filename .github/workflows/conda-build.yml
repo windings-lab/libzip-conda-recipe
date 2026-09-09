@@ -76,8 +76,8 @@ jobs:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
         run: |
           if [ -z "${ANACONDA_API_TOKEN}" ]; then
-            echo "ANACONDA_API_TOKEN is not set; skipping upload" >&2
+            echo "ANACONDA_API_TOKEN is not set" >&2
             exit 1
           fi
           find build_artifacts -name '*.conda' -print -exec \
-            anaconda --token "${ANACONDA_API_TOKEN}" upload --no-progress {} +
+            anaconda org upload --no-progress {} +

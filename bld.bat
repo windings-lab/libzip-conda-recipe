@@ -1,14 +1,11 @@
-:: Build script for the libzip conda package (Windows).
 setlocal EnableDelayedExpansion
 
 mkdir build
 cd build
 if errorlevel 1 exit /b 1
 
-:: %CMAKE_ARGS% is exported by the conda compiler activation scripts; it must
-:: come first so the options below can still override it.
-:: %LIBRARY_PREFIX% is %PREFIX%\Library, the place conda expects native
-:: headers/libraries/binaries to land on Windows.
+:: CMAKE_ARGS comes first so the options below override it
+:: ENABLE_WINDOWS_CRYPTO is off to keep OpenSSL as the AES backend everywhere
 cmake %CMAKE_ARGS% ^
     -G "Ninja" ^
     -DCMAKE_BUILD_TYPE=Release ^
@@ -32,14 +29,7 @@ cmake %CMAKE_ARGS% ^
     ..
 if errorlevel 1 exit /b 1
 
-:: ENABLE_WINDOWS_CRYPTO is off on purpose: OpenSSL is already a host
-:: dependency for every platform, so using it here keeps the AES implementation
-:: identical across Linux, macOS and Windows instead of silently switching to
-:: the Windows CNG backend only on this one platform.
-
-:: libzip's CMake silently disables an optional backend when it cannot find the
-:: library.  config.h records what was really enabled, so refuse to ship a
-:: package that is missing the features this recipe advertises.
+:: CMake drops an optional backend silently when its library is missing
 for %%M in (HAVE_LIBBZ2 HAVE_LIBLZMA HAVE_LIBZSTD HAVE_CRYPTO) do (
     findstr /b /c:"#define %%M" config.h >nul
     if errorlevel 1 (

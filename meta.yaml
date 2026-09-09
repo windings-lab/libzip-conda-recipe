@@ -11,9 +11,7 @@ source:
 
 build:
   number: 0
-  # libzip installs as libzip.so.5 / libzip.5.dylib / zip.dll.  Upstream keeps
-  # the ABI stable inside a minor series and bumps the soversion when it does
-  # not, so pinning to x.x is what downstream consumers need.
+  # matches the libzip.so.5 soname
   run_exports:
     - {{ pin_subpackage('libzip', max_pin='x.x') }}
 
@@ -25,51 +23,30 @@ requirements:
     - ninja
     - pkg-config
   host:
-    # zlib is mandatory; the rest enable the optional compression methods and
-    # the AES encryption support that build.sh explicitly turns on.
     - zlib
     - bzip2
-    # conda-forge splits xz: the runtime is `liblzma`, the headers and the
-    # linker symlink live in `liblzma-devel`.  Depending on `liblzma` alone
-    # makes CMake's find_package(LibLZMA) fail and silently drops XZ support.
+    # headers and linker symlink live in the -devel split, not in liblzma
     - liblzma-devel
     - zstd
     - openssl
-  # No explicit `run:` section: every host dependency above ships a
-  # run_exports, so conda-build pins the correct runtime libraries itself.
 
 test:
   requires:
-    # The test compiles a small consumer program, which is the only way to
-    # prove that the headers, the shared library and the CMake/pkg-config
-    # metadata are all installed consistently.
-    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
     - {{ stdlib('c') }}
-    # Pinned deliberately: left unbounded, the solver is free to satisfy the
-    # test environment with a decade-old cmake that has neither `-S`/`-B`
-    # (3.13) nor `ctest --test-dir` (3.20), and the test fails for a reason
-    # that has nothing to do with the package.
+    # 3.20 for -S/-B and ctest --test-dir
     - cmake >=3.20
     - ninja
     - pkg-config
   files:
-    - test_libzip.c
+    - test_libzip.cpp
     - CMakeLists.txt
   commands:
-    # The command line tools the package ships.
     - zipcmp -V
     - zipmerge -V
     - ziptool -h
-
-    # pkg-config metadata must resolve inside the test environment, not point
-    # back at conda-build's throwaway build prefix.
     - pkg-config --modversion libzip
-
-    # Build test_libzip.c against the installed package through the exported
-    # CMake targets -- that is how downstream recipes consume libzip, and it
-    # is the part of the packaging most likely to be subtly wrong.  The test
-    # binary then asserts at runtime that bzip2, XZ, Zstandard and OpenSSL
-    # really made it into the library.
+    # builds test_libzip.cpp against the installed package via its CMake targets
     - cmake -G Ninja -S . -B build-test -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX"           # [unix]
     - cmake -G Ninja -S . -B build-test -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%LIBRARY_PREFIX%"  # [win]
     - cmake --build build-test

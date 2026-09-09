@@ -33,7 +33,7 @@ directory and `conda build .` works from a fresh clone.
 | `build.sh` | Build script for Linux and macOS |
 | `bld.bat` | Build script for Windows |
 | `conda_build_config.yaml` | Toolchain selection and the OpenSSL pin |
-| `test_libzip.c` | Smoke test compiled and run against the installed package |
+| `test_libzip.cpp` | Smoke test compiled and run against the installed package |
 | `CMakeLists.txt` | Consumer project for the smoke test — does **not** build libzip |
 | `.github/workflows/conda-build.yml` | Builds on Linux and Windows; uploads on tags |
 
@@ -83,10 +83,18 @@ generated `config.h` for `HAVE_LIBBZ2`, `HAVE_LIBLZMA`, `HAVE_LIBZSTD` and
 
 The upstream regression suite (`BUILD_REGRESS`) is disabled because it is
 driven by `nihtest`, which is not packaged for conda. The `test:` section
-compensates: it builds `test_libzip.c` against the *installed* package through
+compensates: it builds `test_libzip.cpp` against the *installed* package through
 the exported CMake targets, and the resulting binary asks libzip at runtime
 which methods it supports before round-tripping one archive entry through each
 of them.
+
+The test is C++20 while libzip itself is C. That is deliberate: it exercises
+the `extern "C"` guards in the installed `zip.h` and pulls the C++ runtime into
+the test environment, so `test: requires` asks for `{{ compiler('cxx') }}`
+rather than the C compiler. The handles are wrapped in RAII types that respect
+libzip's `zip_close`/`zip_discard` ownership split, and both constructors take
+an already-open handle by reference — so a null handle is impossible to pass
+rather than something checked at runtime.
 
 ## Problems hit while writing this recipe
 
@@ -120,21 +128,14 @@ until that migration lands upstream.
 
 ## Verified build
 
-Both published builds pass the full `conda build` run, test section included:
+Both platforms pass the full `conda build` run, test section included. The
+win-64 build comes from the CI job on `windows-latest`, which is what exercises
+`bld.bat` and the MSVC toolchain. The linux-64 build below was made on Arch
+Linux (glibc 2.42, kernel 7.1.9) with conda-build 26.7.1 against conda-forge,
+targeting the glibc 2.17 sysroot:
 
 ```
-libzip-1.11.4-hffcc938_0.conda   linux-64   119 KiB
-libzip-1.11.4-hb54a563_0.conda   win-64     110 KiB
-```
-
-The win-64 build comes from the CI job on `windows-latest`, which is what
-exercises `bld.bat` and the MSVC toolchain.
-
-The linux-64 build below was made on Arch Linux (glibc 2.42, kernel 7.1.9) with
-conda-build 26.7.1 against conda-forge, targeting the glibc 2.17 sysroot:
-
-```
-libzip-1.11.4-hffcc938_0.conda   (linux-64, 119 KiB)
+libzip-1.11.4-hab58984_0.conda   (linux-64, 119 KiB)
 
 depends:
   __glibc >=2.17,<3.0.a0     libgcc >=16
@@ -152,6 +153,7 @@ Smoke test output from a clean environment:
 
 ```
 libzip 1.11.4 (compiled against 1.11.4)
+PASS  store supported
 PASS  deflate (zlib) supported
 PASS  bzip2 supported
 PASS  xz (liblzma) supported
