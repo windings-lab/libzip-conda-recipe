@@ -1,14 +1,8 @@
 # libzip conda recipe
 
-A conda recipe for [libzip](https://libzip.org/) 1.11.4 — a C library for reading,
-creating and modifying zip archives.
-
-libzip was chosen because it exercises the parts of package building that
-actually tend to break: it is compiled from C sources with CMake, it links
-against five external libraries (zlib, bzip2, xz, Zstandard, OpenSSL), each of
-which is *optional* from CMake's point of view, and it installs a shared
-library, public headers, CMake package config files, pkg-config metadata and
-three command line tools.
+A conda recipe for [libzip](https://libzip.org/) 1.11.4 — a C library for
+reading, creating and modifying zip archives. Built from source with CMake and
+linked against zlib, bzip2, xz, Zstandard and OpenSSL.
 
 | | |
 |---|---|
@@ -18,9 +12,66 @@ three command line tools.
 | Recipe also covers | `osx-64`, `osx-arm64` — selectors are in place, but untested |
 | Source | https://github.com/nih-at/libzip/releases/tag/v1.11.4 |
 
+## Install
+
 ```bash
 conda install -c gasterlab libzip
 ```
+
+Or from `environment.yml`, which carries the channel list:
+
+```bash
+conda env create -f environment.yml
+conda activate libzip-demo
+ziptool -h
+```
+
+## Build
+
+```bash
+git clone https://github.com/windings-lab/libzip-conda-recipe.git
+cd libzip-conda-recipe
+./bootstrap.sh          # bootstrap.ps1 on Windows
+```
+
+The package lands in `build_artifacts/`.
+
+`bootstrap.sh` uses `conda` if it is already on `PATH`. Otherwise it fetches the
+`micromamba` static binary and builds a tool environment holding `conda`,
+`conda-build` and `anaconda-client` under `~/.conda-tools` — about 45 seconds,
+against two to three minutes for the full Miniforge installer.
+
+With conda already set up, this is equivalent:
+
+```bash
+conda build . -c conda-forge --override-channels
+```
+
+| Environment variable | Effect |
+|---|---|
+| `CONDA_TOOLS_PREFIX` | Where the tool environment and package cache go |
+| `CONDA_PKGS_DIRS` | Package cache location on its own |
+| `ANACONDA_API_TOKEN` | Set to also publish the built package |
+
+## Release
+
+Push to `main`. CI builds on Linux and Windows, then uploads with
+`anaconda org upload --skip-existing`, so a push that changes neither `version`
+nor `build: number` republishes nothing.
+
+To cut a new version:
+
+```bash
+./bump.sh 1.11.5
+```
+
+That fetches the tarball, writes its `sha256` and the new `version` into
+`meta.yaml`, and resets `build: number` to `0`. The hash is stored in the recipe
+rather than computed at build time, so it stays pinned in git and a re-cut
+upstream tarball fails the build instead of being picked up silently.
+
+For a rebuild of the same version against changed dependencies, leave `version`
+alone and increment `build: number` instead.
 
 ## Layout
 
@@ -35,73 +86,44 @@ directory and `conda build .` works from a fresh clone.
 | `conda_build_config.yaml` | Toolchain selection and the OpenSSL pin |
 | `test_libzip.cpp` | Smoke test compiled and run against the installed package |
 | `CMakeLists.txt` | Consumer project for the smoke test — does **not** build libzip |
-| `bootstrap.sh` / `bootstrap.ps1` | One-command build, including installing conda itself |
+| `bootstrap.sh` / `bootstrap.ps1` | One-command build, conda included |
+| `bump.sh` | Points the recipe at a new upstream version |
+| `environment.yml` | Channel list and dependency for consumers |
 | `.github/workflows/conda-build.yml` | Builds on Linux and Windows; publishes from `main` |
 
-## Building
+## Build options
 
-From a machine with nothing installed:
+`build.sh` and `bld.bat` configure an out-of-source CMake build with these set:
 
-```bash
-git clone https://github.com/windings-lab/libzip-conda-recipe.git
-cd libzip-conda-recipe
-./bootstrap.sh          # bootstrap.ps1 on Windows
-```
+| Option | Effect |
+|---|---|
+| `ENABLE_BZIP2`, `ENABLE_LZMA`, `ENABLE_ZSTD` | bzip2, XZ and Zstandard compression |
+| `ENABLE_OPENSSL` | AES-128/192/256 encryption |
+| `BUILD_TOOLS` | `zipcmp`, `zipmerge`, `ziptool` |
+| `ENABLE_GNUTLS`, `ENABLE_MBEDTLS`, `ENABLE_COMMONCRYPTO` | off — OpenSSL is the one crypto backend |
+| `BUILD_REGRESS` | off — the suite needs `nihtest`, which conda does not package |
 
-The script installs Miniforge into `~/miniforge3` only if `conda` is missing,
-adds `conda-build` if it is not already there, and leaves the package in
-`build_artifacts/`. Set `MINIFORGE_PREFIX` to install conda somewhere else, and
-`ANACONDA_API_TOKEN` to publish the result as well. With conda already set up,
-plain `conda build . -c conda-forge --override-channels` does the same thing.
+Turning an option on is not enough: libzip's CMake drops a backend when it
+cannot find the library, and the result still builds, links and handles plain
+deflate archives. Both scripts therefore grep the generated `config.h` for
+`HAVE_LIBBZ2`, `HAVE_LIBLZMA`, `HAVE_LIBZSTD` and `HAVE_CRYPTO`, and fail the
+build if any is missing.
 
-CI runs the same `bootstrap.sh` on both platforms, so what runs there is what
-runs locally. `bootstrap.ps1` is the exception: CI reaches Windows through Git
-Bash with conda already installed, so the PowerShell path — specifically its
-Miniforge install — has not been exercised.
+## Testing
 
-Install the published build and try it:
+With `BUILD_REGRESS` off, the `test:` section carries the weight. It runs the
+three command line tools, checks the pkg-config metadata, then builds
+`test_libzip.cpp` against the *installed* package through the exported CMake
+targets — the same path a downstream recipe takes. The resulting binary asks
+libzip at runtime which compression and encryption methods it supports, then
+round-trips one archive entry through each.
 
-```bash
-conda env create -f environment.yml
-conda activate libzip-demo
-ziptool -h
-```
-
-`environment.yml` carries the channel list, so no `-c` flag is needed. The
-equivalent one-liner is `conda install -c gasterlab libzip`.
-
-## What the recipe does
-
-`build.sh` / `bld.bat` configure an out-of-source CMake build with every
-optional backend explicitly turned on:
-
-* `ENABLE_BZIP2`, `ENABLE_LZMA`, `ENABLE_ZSTD` — the bzip2, XZ and Zstandard
-  compression methods
-* `ENABLE_OPENSSL` — AES-128/192/256 encryption
-* `BUILD_TOOLS` — `zipcmp`, `zipmerge` and `ziptool`
-
-Turning an option *on* is not enough, though. libzip's CMake silently drops a
-backend when it cannot find the corresponding library, and the package still
-builds, still links and still handles plain deflate archives — the damage only
-surfaces later, in whatever downstream package tries to read a
-zstd-compressed or encrypted entry. Both build scripts therefore grep the
-generated `config.h` for `HAVE_LIBBZ2`, `HAVE_LIBLZMA`, `HAVE_LIBZSTD` and
-`HAVE_CRYPTO` and fail the build if any of them is missing.
-
-The upstream regression suite (`BUILD_REGRESS`) is disabled because it is
-driven by `nihtest`, which is not packaged for conda. The `test:` section
-compensates: it builds `test_libzip.cpp` against the *installed* package through
-the exported CMake targets, and the resulting binary asks libzip at runtime
-which methods it supports before round-tripping one archive entry through each
-of them.
-
-The test is C++20 while libzip itself is C. That is deliberate: it exercises
-the `extern "C"` guards in the installed `zip.h` and pulls the C++ runtime into
-the test environment, so `test: requires` asks for `{{ compiler('cxx') }}`
-rather than the C compiler. The handles are wrapped in RAII types that respect
-libzip's `zip_close`/`zip_discard` ownership split, and both constructors take
-an already-open handle by reference — so a null handle is impossible to pass
-rather than something checked at runtime.
+The test is C++20 while libzip is C, which exercises the `extern "C"` guards in
+the installed `zip.h` and pulls the C++ runtime into the test environment; that
+is why `test: requires` asks for `{{ compiler('cxx') }}`. Handles are wrapped in
+RAII types that respect libzip's `zip_close`/`zip_discard` ownership split, and
+both constructors take an already-open handle by reference, so a null handle
+cannot be passed rather than being rejected at runtime.
 
 ## Problems hit while writing this recipe
 

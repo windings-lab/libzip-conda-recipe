@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# Builds the package. Installs Miniforge if needed; uploads if ANACONDA_API_TOKEN is set.
+# Builds the package. Bootstraps conda if needed; uploads if ANACONDA_API_TOKEN is set.
 set -euo pipefail
 
-readonly PREFIX="${MINIFORGE_PREFIX:-${HOME}/miniforge3}"
+readonly TOOLS="${CONDA_TOOLS_PREFIX:-${HOME}/.conda-tools}"
 readonly OUTPUT="build_artifacts"
 
-# $CONDA is set by setup-miniconda in CI, where conda is installed but not on PATH
+export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-${TOOLS}/pkgs}"
+
+add_conda_to_path() {
+    for dir in "$1/bin" "$1/Scripts"; do
+        if [ -x "${dir}/conda" ] || [ -x "${dir}/conda.exe" ]; then
+            export PATH="${dir}:${PATH}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 if ! command -v conda > /dev/null; then
-    for candidate in "${CONDA:-}" "${PREFIX}"; do
-        if [ -n "${candidate}" ] && [ -f "${candidate}/etc/profile.d/conda.sh" ]; then
-            # shellcheck disable=SC1091
-            . "${candidate}/etc/profile.d/conda.sh"
-            conda activate base
+    for candidate in "${CONDA:-}" "${TOOLS}/env"; do
+        if [ -n "${candidate}" ] && add_conda_to_path "${candidate}"; then
             break
         fi
     done
@@ -19,27 +27,26 @@ fi
 
 if ! command -v conda > /dev/null; then
     case "$(uname -s)" in
-        Linux) os=Linux ;;
-        Darwin) os=MacOSX ;;
-        *) echo "cannot install conda on $(uname -s); use bootstrap.ps1 on Windows" >&2; exit 1 ;;
+        Linux) platform=linux ;;
+        Darwin) platform=osx ;;
+        *) echo "cannot bootstrap on $(uname -s); use bootstrap.ps1 on Windows" >&2; exit 1 ;;
     esac
     case "$(uname -m)" in
-        x86_64) arch=x86_64 ;;
-        aarch64 | arm64) arch=$([ "${os}" = Linux ] && echo aarch64 || echo arm64) ;;
+        x86_64) arch=64 ;;
+        aarch64 | arm64) arch=aarch64 ;;
         *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
     esac
 
-    installer="$(mktemp -t miniforge.XXXXXX.sh)"
-    trap 'rm -f "${installer}"' EXIT
+    echo "bootstrapping conda-build into ${TOOLS}"
+    mkdir -p "${TOOLS}"
+    curl -fsSL "https://micro.mamba.pm/api/micromamba/${platform}-${arch}/latest" |
+        tar -xj -C "${TOOLS}" bin/micromamba
 
-    echo "installing Miniforge into ${PREFIX}"
-    curl -fsSL -o "${installer}" \
-        "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-${os}-${arch}.sh"
-    bash "${installer}" -b -p "${PREFIX}"
+    MAMBA_ROOT_PREFIX="${TOOLS}" "${TOOLS}/bin/micromamba" create -y \
+        -p "${TOOLS}/env" -c conda-forge --override-channels \
+        conda conda-build anaconda-client
 
-    # shellcheck disable=SC1091
-    . "${PREFIX}/etc/profile.d/conda.sh"
-    conda activate base
+    add_conda_to_path "${TOOLS}/env"
 fi
 
 conda list -n base conda-build | grep -q '^conda-build ' ||

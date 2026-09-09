@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  CONDA_TOOLS_PREFIX: ${{ github.workspace }}/.conda-tools
+
 jobs:
   build:
     name: build (${{ matrix.os }})
@@ -13,22 +16,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        shell: bash -el {0}
+        include:
+          - os: ubuntu-latest
+            script: ./bootstrap.sh
+            shell: bash
+          - os: windows-latest
+            script: ./bootstrap.ps1
+            shell: pwsh
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: conda-incubator/setup-miniconda@v3
+      # only the package cache is restored; the tool env is rebuilt from it
+      - uses: actions/cache@v4
         with:
-          miniforge-version: latest
-          channels: conda-forge
-          conda-remove-defaults: "true"
+          path: ${{ env.CONDA_TOOLS_PREFIX }}/pkgs
+          key: conda-pkgs-${{ matrix.os }}-${{ hashFiles('meta.yaml', 'conda_build_config.yaml') }}
+          restore-keys: conda-pkgs-${{ matrix.os }}-
 
       - name: Build and test the package
-        run: ./bootstrap.sh
+        shell: ${{ matrix.shell }}
+        run: ${{ matrix.script }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -41,25 +49,13 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -el {0}
 
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: build_artifacts
 
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          miniforge-version: latest
-          channels: conda-forge
-          conda-remove-defaults: "true"
-
-      - name: Install anaconda-client
-        run: conda install -y -n base anaconda-client
-
-      # --skip-existing keeps this idempotent; conda run avoids PATH activation
+      # --skip-existing keeps this idempotent across pushes
       - name: Upload
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
@@ -68,6 +64,10 @@ jobs:
             echo "ANACONDA_API_TOKEN is not set" >&2
             exit 1
           fi
+          curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/latest |
+            tar -xj bin/micromamba
+          ./bin/micromamba create -y -p ./anaconda-client-env \
+            -c conda-forge --override-channels anaconda-client
           find build_artifacts -name '*.conda' -print -exec \
-            conda run -n base --no-capture-output \
-              anaconda org upload --skip-existing --no-progress {} +
+            ./anaconda-client-env/bin/anaconda org upload \
+              --skip-existing --no-progress {} +
